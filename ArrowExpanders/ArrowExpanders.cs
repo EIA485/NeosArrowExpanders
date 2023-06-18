@@ -97,7 +97,7 @@ namespace ArrowExpanders
 					}
 					var firstRoot = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>();
 
-					var currentSelection = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>((e) => e.Slot.GetComponent<Button>()?.IsHovering.Value == true) ?? firstRoot;
+					var currentSelection = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>((e) => e.Slot.GetComponent<Button>()?.IsHovering.Value == true, excludeDisabled: true) ?? firstRoot;
 
 					currentSelection.World.RunSynchronously(() =>
 					{
@@ -132,17 +132,11 @@ namespace ArrowExpanders
 								break;
 							case Key.UpArrow://broken
 								currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-								var parentExpander = parentExp(currentSelection.Slot);
-
-                                var expander = searchBefore<Expander>(currentSelection.Slot);
-
-                                if (currentSelection == firstRoot) expander = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>().Last();
-                                else if (expander?.IsExpanded == true)
-								{
-									var candidate = (expander.SectionRoot.Target ?? expander.Slot).GetComponentsInChildren<Expander>()?.Last();
-									if (parentExp(candidate.Slot) == parentExpander) expander = parentExpander;
-								}
-                                if (expander != null) expander.Slot.GetComponent<Button>().IsHovering.Value = true;
+								var expanders = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>(excludeDisabled: true);
+								int index = expanders.IndexOf(currentSelection) -1;
+								if (index < 0) index = expanders.Count;
+								var expander = expanders[index];
+								if (expander != null) expander.Slot.GetComponent<Button>().IsHovering.Value = true;
 								break;
 							case Key.DownArrow:
 								currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
@@ -163,7 +157,7 @@ namespace ArrowExpanders
 		{
 			for (int i = index; i >= 0; i--)
 			{
-				var comp = root[i].GetComponentInChildren<T>();
+				var comp = root[i].GetComponentInChildren<T>((f) => f.Slot.IsActive);
 				if (comp != null) return comp;
 			}
 			if (root.Parent == root.World.RootSlot) return null;
@@ -174,7 +168,7 @@ namespace ArrowExpanders
 		{
 			for (int i = index; i < root.ChildrenCount; i++)
 			{
-				var comp = root[i].GetComponentInChildren<T>();
+				var comp = root[i].GetComponentInChildren<T>((f)=>f.Slot.IsActive);
 				if (comp != null) return comp;
 			}
 			if (root.Parent == root.World.RootSlot) return null;
@@ -186,14 +180,14 @@ namespace ArrowExpanders
 			foreach (var child in cur.Children)
 			{
 				if (child == last) continue;
-				var comp = child.GetComponentInChildren<T>(filter);
+				var comp = child.GetComponentInChildren<T>(filter, excludeDisabled: true);
 				if (comp != null) return comp;
 			}
 			if (last.Parent == last.World.RootSlot) return null;
 			return searchInParentsWithSiblings<T>(cur, filter);
 		}
 
-		static Expander parentExp(Slot cur) => searchInParentsWithSiblings<Expander>(cur, (e) => cur.IsChildOf(e.SectionRoot.Target ?? cur/* will never be true, just handling nulls*/));
+		static Expander parentExp(Slot cur) => searchInParentsWithSiblings<Expander>(cur, (e) => cur.IsChildOf(e.SectionRoot.Target ?? cur/* will never be true, just handling nulls*/) && e.Slot.IsActive);
 
 		static string parentString(Slot slot)
 		{
