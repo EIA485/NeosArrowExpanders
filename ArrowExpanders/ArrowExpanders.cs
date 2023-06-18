@@ -19,9 +19,13 @@ namespace ArrowExpanders
         public override string Link => "https://github.com/EIA485/NeosArrowExpanders/";
         public override void OnEngineInit()
         {
+            config = GetConfiguration();
             Harmony harmony = new Harmony("net.eia485.ArrowExpanders");
             harmony.PatchAll();
         }
+        static ModConfiguration config;
+        [AutoRegisterConfigKey]
+        static ModConfigurationKey<bool> KEY_PreferParent = new("PreferParentLeft", "only applies when the current expander is closed, when true the left arrow will prefer the parent of the current expander otherwise it will attempt to find the closest open expander", () => true);
 
         static Dictionary<Key, DateTime> pressedAt = new();
 
@@ -108,7 +112,25 @@ namespace ArrowExpanders
                                 if (currentSelection.SectionRoot.Target != null && currentSelection.IsExpanded) currentSelection.IsExpanded = false;
                                 else
                                 {
-                                    var outerExp = parentExp(currentSelection.Slot);
+                                    var outerExp = config.GetValue(KEY_PreferParent) ? parentExp(currentSelection.Slot) : null;
+                                    if (outerExp == null)
+                                    {
+                                        var expandas = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>();
+                                        int next = -1;
+                                        List<Expander> outerlist = new();
+                                        foreach (var exp in expandas)
+                                        {
+                                            if (exp == currentSelection) { next = outerlist.Count - 1; continue; }
+                                            if (exp.Slot.IsActive && exp.SectionRoot.Target != null && exp.IsExpanded) outerlist.Add(exp);
+                                        }
+                                        if (outerlist.Count > 0)
+                                        {
+                                            if (next < 0 && next + 1 < outerlist.Count) next = next + 1;
+                                            outerExp = outerlist[next];
+                                        }
+                                        else
+                                            outerExp = currentSelection;
+                                    }
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
@@ -132,7 +154,7 @@ namespace ArrowExpanders
                                     Expander outerExp = null;
                                     if (outerlist.Count > 0)
                                     {
-                                        if (next > outerlist.Count - 1 && next -1 >-1) next = next -1;
+                                        if (next > outerlist.Count - 1 && next - 1 > -1) next = next - 1;
                                         outerExp = outerlist[next];
                                     }
                                     else
