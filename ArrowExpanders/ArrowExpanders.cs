@@ -30,7 +30,7 @@ namespace ArrowExpanders
         static Dictionary<Key, DateTime> pressedAt = new();
 
         [HarmonyPatch(typeof(Userspace), "OnCommonUpdate")]
-        class MoreKeybindsPatch
+        class ArrowExpandersPatch
         {
             static void Postfix(Userspace __instance)
             {
