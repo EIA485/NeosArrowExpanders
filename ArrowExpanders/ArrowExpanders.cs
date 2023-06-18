@@ -104,7 +104,7 @@ namespace ArrowExpanders
                     var firstRoot = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>();
 
                     var currentSelection = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>((e) => e.Slot.GetComponent<Button>()?.IsHovering.Value == true, excludeDisabled: true) ?? firstRoot;
-
+                    if(currentSelection == null) return;
                     currentSelection.World.RunSynchronously(() =>
                     {
 
