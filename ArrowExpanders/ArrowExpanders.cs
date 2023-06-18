@@ -3,8 +3,6 @@ using FrooxEngine.UIX;
 using HarmonyLib;
 using NeosModLoader;
 using BaseX;
-using System.Runtime.ConstrainedExecution;
-using static FrooxEngine.FogBoxVolumeMaterial;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,6 +24,8 @@ namespace ArrowExpanders
         static ModConfiguration config;
         [AutoRegisterConfigKey]
         static ModConfigurationKey<bool> KEY_PreferParent = new("PreferParentLeft", "only applies when the current expander is closed, when true the left arrow will prefer the parent of the current expander otherwise it will attempt to find the closest open expander", () => true);
+        [AutoRegisterConfigKey]
+        static ModConfigurationKey<bool> KEY_EnterBind = new("EnterBind", "when true while enter is pressed ArrowExpanders will attempt to press the closest button to the currently selected expander", () => false);
 
         static Dictionary<Key, DateTime> pressedAt = new();
 
@@ -43,6 +43,7 @@ namespace ArrowExpanders
                     else if (input.GetKeyDown(Key.RightArrow)) key = Key.RightArrow;
                     else if (input.GetKeyDown(Key.UpArrow)) key = Key.UpArrow;
                     else if (input.GetKeyDown(Key.DownArrow)) key = Key.DownArrow;
+                    else if (input.GetKeyDown(Key.Return) && config.GetValue(KEY_EnterBind)) key = Key.Return;
 
                     //the hold function stops randomly, will investigate later. also maybe this should run evey x miliseconds instead of at the current frameate
                     //also maybe should clear all other potental holds when one starts or when a button is pressed
@@ -52,6 +53,7 @@ namespace ArrowExpanders
 
                     if (!key.HasValue)
                     {
+                        if(input.GetKey(Key.Return) && config.GetValue(KEY_EnterBind)) key = Key.Return;
                         KeyValuePair<Key, DateTime>? candidate = null;
 
                         foreach (var pair in pressedAt)
@@ -169,11 +171,11 @@ namespace ArrowExpanders
                                     }
                                 }
                                 break;
-                            case Key.UpArrow://broken
+                            case Key.UpArrow:
                                 currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
                                 var expanders = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>(excludeDisabled: true);
                                 int index = expanders.IndexOf(currentSelection) - 1;
-                                if (index < 0) index = expanders.Count;
+                                if (index < 0) index = expanders.Count -1;
                                 var expander = expanders[index];
                                 if (expander != null) expander.Slot.GetComponent<Button>().IsHovering.Value = true;
                                 break;
@@ -181,6 +183,11 @@ namespace ArrowExpanders
                                 currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
                                 var expanderr = searchAfter<Expander>(currentSelection.Slot) ?? firstRoot;
                                 if (expanderr != null) expanderr.Slot.GetComponent<Button>().IsHovering.Value = true;
+                                break;
+                            case Key.Return://its fairly common for expanders to be next to buttons. may as well add the option to use them aswell.
+                                float3 presspointGlobal = currentSelection.Slot.LocalPointToGlobal(float3.Zero);
+                                float2 half = new(.5f, .5f);
+                                searchInParentsWithSiblings<Button>(currentSelection.Slot).SimulatePress(.1f, new(currentSelection, presspointGlobal, in half, in half));
                                 break;
                         }
                     });
