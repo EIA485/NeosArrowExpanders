@@ -25,7 +25,9 @@ namespace ArrowExpanders
         [AutoRegisterConfigKey]
         static ModConfigurationKey<bool> KEY_PreferParent = new("PreferParentLeft", "only applies when the current expander is closed, when true the left arrow will prefer the parent of the current expander otherwise it will attempt to find the closest open expander", () => true);
         [AutoRegisterConfigKey]
-        static ModConfigurationKey<bool> KEY_EnterBind = new("EnterBind", "when true while enter is pressed ArrowExpanders will attempt to press the closest button to the currently selected expander", () => false);
+        static ModConfigurationKey<bool> KEY_InstantAction = new("InstantAction", "when true if the left or right key are pressed and the selected expander is in it's target state then it will jump a new expander and run the keys action on that expander. when false it will only jump to the new expander but not preform an action till the action.", () => true);
+        [AutoRegisterConfigKey]
+        static ModConfigurationKey<Key?> KEY_EnterBind = new("EnterBind", "what key if any should trigger an attempt to press the closest button?", () => Key.Return);
 
         static Dictionary<Key, DateTime> pressedAt = new();
 
@@ -43,7 +45,7 @@ namespace ArrowExpanders
                     else if (input.GetKeyDown(Key.RightArrow)) key = Key.RightArrow;
                     else if (input.GetKeyDown(Key.UpArrow)) key = Key.UpArrow;
                     else if (input.GetKeyDown(Key.DownArrow)) key = Key.DownArrow;
-                    else if (input.GetKeyDown(Key.Return) && config.GetValue(KEY_EnterBind)) key = Key.Return;
+                    else if (config.GetValue(KEY_EnterBind).HasValue && input.GetKeyDown(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
 
                     //the hold function stops randomly, will investigate later. also maybe this should run evey x miliseconds instead of at the current frameate
                     //also maybe should clear all other potental holds when one starts or when a button is pressed
@@ -53,7 +55,7 @@ namespace ArrowExpanders
 
                     if (!key.HasValue)
                     {
-                        if(input.GetKey(Key.Return) && config.GetValue(KEY_EnterBind)) key = Key.Return;
+                        if(config.GetValue(KEY_EnterBind).HasValue && input.GetKeyDown(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
                         KeyValuePair<Key, DateTime>? candidate = null;
 
                         foreach (var pair in pressedAt)
@@ -136,7 +138,7 @@ namespace ArrowExpanders
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-                                        outerExp.IsExpanded = false;
+                                        if (config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = false;
                                         outerExp.Slot.GetComponent<Button>().IsHovering.Value = true;
                                     }
                                 }
@@ -166,7 +168,7 @@ namespace ArrowExpanders
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-                                        outerExp.IsExpanded = true;
+                                        if(config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = true;
                                         outerExp.Slot.GetComponent<Button>().IsHovering.Value = true;
                                     }
                                 }
