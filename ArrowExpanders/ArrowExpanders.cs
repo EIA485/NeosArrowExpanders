@@ -28,8 +28,13 @@ namespace ArrowExpanders
         static ModConfigurationKey<bool> KEY_InstantAction = new("InstantAction", "when true if the left or right key are pressed and the selected expander is in it's target state then it will jump a new expander and run the keys action on that expander. when false it will only jump to the new expander but not preform an action till the action.", () => true);
         [AutoRegisterConfigKey]
         static ModConfigurationKey<Key?> KEY_EnterBind = new("EnterBind", "what key if any should trigger an attempt to press the closest button?", () => Key.Return);
+        [AutoRegisterConfigKey]
+        static ModConfigurationKey<int> KEY_HoldMilliseconds = new("HoldMilliseconds", "number of milliseconds to wait before starting hold behavior", () => 500);
+        [AutoRegisterConfigKey]
+        static ModConfigurationKey<int> KEY_HoldRateMinMS = new("HoldRateMinMS", "minimum number of milliseconds between hold actions", () => 0);
 
         static Dictionary<Key, DateTime> pressedAt = new();
+        static DateTime? LastHoldTriger;
 
         [HarmonyPatch(typeof(Userspace), "OnCommonUpdate")]
         class ArrowExpandersPatch
@@ -45,28 +50,38 @@ namespace ArrowExpanders
                     else if (input.GetKeyDown(Key.RightArrow)) key = Key.RightArrow;
                     else if (input.GetKeyDown(Key.UpArrow)) key = Key.UpArrow;
                     else if (input.GetKeyDown(Key.DownArrow)) key = Key.DownArrow;
-                    else if (config.GetValue(KEY_EnterBind).HasValue && input.GetKeyDown(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
+                    else if (config.GetValue(KEY_EnterBind).HasValue && input.GetKey(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
 
-                    //the hold function stops randomly, will investigate later. also maybe this should run evey x miliseconds instead of at the current frameate
-                    //also maybe should clear all other potental holds when one starts or when a button is pressed
                     if (input.GetKeyDown(Key.RightArrow)) pressedAt[Key.RightArrow] = DateTime.Now;
                     if (input.GetKeyDown(Key.UpArrow)) pressedAt[Key.UpArrow] = DateTime.Now;
                     if (input.GetKeyDown(Key.DownArrow)) pressedAt[Key.DownArrow] = DateTime.Now;
 
                     if (!key.HasValue)
                     {
-                        if(config.GetValue(KEY_EnterBind).HasValue && input.GetKeyDown(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
-                        KeyValuePair<Key, DateTime>? candidate = null;
-
-                        foreach (var pair in pressedAt)
-                        {
-                            if (input.GetKey(pair.Key) && (DateTime.Now - pair.Value).Milliseconds > 500)
+                        if (config.GetValue(KEY_HoldRateMinMS) == 0 || !LastHoldTriger.HasValue || (DateTime.Now - LastHoldTriger.Value).TotalMilliseconds >= config.GetValue(KEY_HoldRateMinMS)) {
+                            KeyValuePair<Key, DateTime>? candidate = null;
+                            KeyValuePair<Key, DateTime>? latest = null;
+                            int delayms = config.GetValue(KEY_HoldMilliseconds);
+                            foreach (var pair in pressedAt)
                             {
-                                if (candidate.HasValue && candidate.Value.Value.CompareTo(pair.Value) == 1) continue;
-                                candidate = pair;
+                                if (latest == null) latest = pair;
+                                else if (pair.Value.CompareTo(latest.Value) > 0) latest = pair;
+                                if (input.GetKey(pair.Key) && (DateTime.Now - pair.Value).TotalMilliseconds > delayms)
+                                {
+                                    if (candidate.HasValue && candidate.Value.Value.CompareTo(pair.Value) == 1) continue;
+                                    candidate = pair;
+                                }
+                            }
+                            if (candidate != null && candidate.Value.Key == latest.Value.Key)
+                            {
+                                key = candidate.Value.Key;
+                                LastHoldTriger = DateTime.Now;
+                            }
+                            else
+                            {
+                                LastHoldTriger = null;
                             }
                         }
-                        if (candidate != null) key = candidate.Value.Key;
                     }
 
 
@@ -106,7 +121,7 @@ namespace ArrowExpanders
                     var firstRoot = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>();
 
                     var currentSelection = tool.Laser.CurrentInteractionTarget.Slot.GetComponentInChildren<Expander>((e) => e.Slot.GetComponent<Button>()?.IsHovering.Value == true, excludeDisabled: true) ?? firstRoot;
-                    if(currentSelection == null) return;
+                    if (currentSelection == null) return;
                     currentSelection.World.RunSynchronously(() =>
                     {
 
@@ -168,7 +183,7 @@ namespace ArrowExpanders
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-                                        if(config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = true;
+                                        if (config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = true;
                                         outerExp.Slot.GetComponent<Button>().IsHovering.Value = true;
                                     }
                                 }
@@ -177,7 +192,7 @@ namespace ArrowExpanders
                                 currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
                                 var expanders = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>(excludeDisabled: true);
                                 int index = expanders.IndexOf(currentSelection) - 1;
-                                if (index < 0) index = expanders.Count -1;
+                                if (index < 0) index = expanders.Count - 1;
                                 var expander = expanders[index];
                                 if (expander != null) expander.Slot.GetComponent<Button>().IsHovering.Value = true;
                                 break;
