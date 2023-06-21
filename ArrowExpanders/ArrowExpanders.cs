@@ -13,7 +13,7 @@ namespace ArrowExpanders
     {
         public override string Name => "ArrowExpanders";
         public override string Author => "eia485";
-        public override string Version => "1.0.0";
+        public override string Version => "1.0.1";
         public override string Link => "https://github.com/EIA485/NeosArrowExpanders/";
         public override void OnEngineInit()
         {
