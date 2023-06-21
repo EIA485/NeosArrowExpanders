@@ -65,7 +65,7 @@ namespace ArrowExpanders
                             foreach (var pair in pressedAt)
                             {
                                 if (latest == null) latest = pair;
-                                else if (pair.Value.CompareTo(latest.Value) > 0) latest = pair;
+                                else if (pair.Value.CompareTo(latest.Value.Value) > 0) latest = pair;
                                 if (input.GetKey(pair.Key) && (DateTime.Now - pair.Value).TotalMilliseconds > delayms)
                                 {
                                     if (candidate.HasValue && candidate.Value.Value.CompareTo(pair.Value) == 1) continue;
