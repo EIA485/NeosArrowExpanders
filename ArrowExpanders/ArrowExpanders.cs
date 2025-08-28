@@ -1,37 +1,33 @@
-﻿using FrooxEngine;
+﻿using BepInEx;
+using BepInEx.Logging;
+using BepInEx.Configuration;
+using BepInEx.NET.Common;
+using BepInExResoniteShim;
+using Renderite.Shared;
+using Elements.Core;
+using FrooxEngine;
 using FrooxEngine.UIX;
 using HarmonyLib;
-using NeosModLoader;
-using BaseX;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ArrowExpanders
 {
-    public class ArrowExpanders : NeosMod
+    [ResonitePlugin(PluginMetadata.GUID, PluginMetadata.NAME, PluginMetadata.VERSION, PluginMetadata.AUTHORS, PluginMetadata.REPOSITORY_URL)]
+    [BepInDependency(BepInExResoniteShim.PluginMetadata.GUID)]
+    public class ArrowExpanders : BasePlugin
     {
-        public override string Name => "ArrowExpanders";
-        public override string Author => "eia485";
-        public override string Version => "1.0.1";
-        public override string Link => "https://github.com/EIA485/NeosArrowExpanders/";
-        public override void OnEngineInit()
+        static ConfigEntry<bool> PreferParent, InstantAction;
+        static ConfigEntry<int> HoldMilliseconds, HoldRateMinMS;
+        static ConfigEntry<Key> EnterBind;
+        static ManualLogSource log;
+        public override void Load()
         {
-            config = GetConfiguration();
-            Harmony harmony = new Harmony("net.eia485.ArrowExpanders");
-            harmony.PatchAll();
+            PreferParent = Config.Bind(PluginMetadata.NAME, "PreferParentLeft", true, "only applies when the current expander is closed, when true the left arrow will prefer the parent of the current expander otherwise it will attempt to find the closest open expander");
+            InstantAction = Config.Bind(PluginMetadata.NAME, "InstantAction", true, "when true if the left or right key are pressed and the selected expander is in it's target state then it will jump a new expander and run the keys action on that expander. when false it will only jump to the new expander but not preform an action till the action.");
+            HoldMilliseconds = Config.Bind(PluginMetadata.NAME, "HoldMilliseconds", 500, "number of milliseconds to wait before starting hold behavior");
+            HoldRateMinMS = Config.Bind(PluginMetadata.NAME, "HoldRateMinMS", 0, "minimum number of milliseconds between hold actions");
+            EnterBind = Config.Bind(PluginMetadata.NAME, "EnterBind", Key.Return, "what key if any should trigger an attempt to press the closest button?");
+            HarmonyInstance.PatchAll();
         }
-        static ModConfiguration config;
-        [AutoRegisterConfigKey]
-        static ModConfigurationKey<bool> KEY_PreferParent = new("PreferParentLeft", "only applies when the current expander is closed, when true the left arrow will prefer the parent of the current expander otherwise it will attempt to find the closest open expander", () => true);
-        [AutoRegisterConfigKey]
-        static ModConfigurationKey<bool> KEY_InstantAction = new("InstantAction", "when true if the left or right key are pressed and the selected expander is in it's target state then it will jump a new expander and run the keys action on that expander. when false it will only jump to the new expander but not preform an action till the action.", () => true);
-        [AutoRegisterConfigKey]
-        static ModConfigurationKey<Key?> KEY_EnterBind = new("EnterBind", "what key if any should trigger an attempt to press the closest button?", () => Key.Return);
-        [AutoRegisterConfigKey]
-        static ModConfigurationKey<int> KEY_HoldMilliseconds = new("HoldMilliseconds", "number of milliseconds to wait before starting hold behavior", () => 500);
-        [AutoRegisterConfigKey]
-        static ModConfigurationKey<int> KEY_HoldRateMinMS = new("HoldRateMinMS", "minimum number of milliseconds between hold actions", () => 0);
 
         static Dictionary<Key, DateTime> pressedAt = new();
         static DateTime? LastHoldTriger;
@@ -50,7 +46,7 @@ namespace ArrowExpanders
                     else if (input.GetKeyDown(Key.RightArrow)) key = Key.RightArrow;
                     else if (input.GetKeyDown(Key.UpArrow)) key = Key.UpArrow;
                     else if (input.GetKeyDown(Key.DownArrow)) key = Key.DownArrow;
-                    else if (config.GetValue(KEY_EnterBind).HasValue && input.GetKey(config.GetValue(KEY_EnterBind).Value)) key = Key.Return;
+                    else if (input.GetKey(EnterBind.Value)) key = Key.Return;
 
                     if (input.GetKeyDown(Key.RightArrow)) pressedAt[Key.RightArrow] = DateTime.Now;
                     if (input.GetKeyDown(Key.UpArrow)) pressedAt[Key.UpArrow] = DateTime.Now;
@@ -58,10 +54,10 @@ namespace ArrowExpanders
 
                     if (!key.HasValue)
                     {
-                        if (config.GetValue(KEY_HoldRateMinMS) == 0 || !LastHoldTriger.HasValue || (DateTime.Now - LastHoldTriger.Value).TotalMilliseconds >= config.GetValue(KEY_HoldRateMinMS)) {
+                        if (HoldRateMinMS.Value == 0 || !LastHoldTriger.HasValue || (DateTime.Now - LastHoldTriger.Value).TotalMilliseconds >= HoldRateMinMS.Value) {
                             KeyValuePair<Key, DateTime>? candidate = null;
                             KeyValuePair<Key, DateTime>? latest = null;
-                            int delayms = config.GetValue(KEY_HoldMilliseconds);
+                            int delayms = HoldMilliseconds.Value;
                             foreach (var pair in pressedAt)
                             {
                                 if (latest == null) latest = pair;
@@ -131,7 +127,7 @@ namespace ArrowExpanders
                                 if (currentSelection.SectionRoot.Target != null && currentSelection.IsExpanded) currentSelection.IsExpanded = false;
                                 else
                                 {
-                                    var outerExp = config.GetValue(KEY_PreferParent) ? parentExp(currentSelection.Slot) : null;
+                                    var outerExp = PreferParent.Value ? parentExp(currentSelection.Slot) : null;
                                     if (outerExp == null)
                                     {
                                         var expandas = tool.Laser.CurrentInteractionTarget.Slot.GetComponentsInChildren<Expander>();
@@ -153,7 +149,7 @@ namespace ArrowExpanders
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-                                        if (config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = false;
+                                        if (InstantAction.Value) outerExp.IsExpanded = false;
                                         outerExp.Slot.GetComponent<Button>().IsHovering.Value = true;
                                     }
                                 }
@@ -183,7 +179,7 @@ namespace ArrowExpanders
                                     if (outerExp != null)
                                     {
                                         currentSelection.Slot.GetComponent<Button>().IsHovering.Value = false;
-                                        if (config.GetValue(KEY_InstantAction)) outerExp.IsExpanded = true;
+                                        if (InstantAction.Value) outerExp.IsExpanded = true;
                                         outerExp.Slot.GetComponent<Button>().IsHovering.Value = true;
                                     }
                                 }
@@ -209,11 +205,11 @@ namespace ArrowExpanders
                         }
                     });
                 }
-                catch (Exception e) { Error(e); } // we dont want to disable the userspace component if we throw an exception
+                catch (Exception e) { log.LogError(e); } // we dont want to disable the userspace component if we throw an exception
             }
 
         }
-        static CommonTool GetCommonTool(UserRoot userRoot, Chirality side) => userRoot.GetRegisteredComponent((CommonTool t) => t.Side.Value == side);
+        static InteractionHandler GetCommonTool(UserRoot userRoot, Chirality side) => userRoot.GetRegisteredComponent((InteractionHandler t) => t.Side.Value == side);
         static Chirality GetOther(Chirality cur) => cur == Chirality.Right ? Chirality.Left : Chirality.Right;
         static T searchBefore<T>(Slot cur) where T : Component => searchBefore<T>(cur.Parent, cur.Parent.IndexOfChild(cur) - 1);
         static T searchBefore<T>(Slot root, int index) where T : Component
@@ -263,9 +259,5 @@ namespace ArrowExpanders
             }
             return result;
         }
-        //static Expander Last(Expander cur)
-        //{
-        //	
-        //}
     }
 }
